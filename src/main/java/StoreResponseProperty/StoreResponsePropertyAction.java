@@ -1,0 +1,114 @@
+/*
+ * Copyright 2015 Codice Foundation
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ */
+
+package StoreResponseProperty;
+
+import org.codice.testify.actions.Action;
+import org.codice.testify.objects.AllObjects;
+import org.codice.testify.objects.TestifyLogger;
+import org.codice.testify.objects.Response;
+import org.codice.testify.objects.TestProperties;
+import org.osgi.framework.BundleActivator;
+import org.osgi.framework.BundleContext;
+
+/**
+ * The StoreResponsePropertyAction class is a Testify Action service for Response elements as test properties
+ */
+public class StoreResponsePropertyAction implements BundleActivator, Action {
+
+    @Override
+    public void executeAction(String s) {
+
+        TestifyLogger.debug("Running StoreResponsePropertyAction", this.getClass().getSimpleName());
+
+        //Cast objects needed for this action
+        TestProperties testProperties = (TestProperties) AllObjects.getObject("testProperties");
+        Response response = (Response)AllObjects.getObject("response");
+        String responseContent = response.getResponse();
+
+        if (s != null) {
+            //Split action info by "=="
+            TestifyLogger.debug(s, this.getClass().getSimpleName());
+            String[] actionElements = s.split("==");
+
+            //If there are not three action elements, then produce an error
+            if (actionElements.length >= 3) {
+
+                //Split the three action elements into separate strings
+                String propertyName = actionElements[0];
+                String startFlag = actionElements[1];
+                String endFlag = actionElements[2];
+
+                //Check that the property name, start flag, and end flag are greater than one character
+                if (propertyName.length() > 0 && startFlag.length() > 0 && endFlag.length() > 0) {
+
+                    //Check is processor response is null
+                    if (responseContent != null) {
+
+                        //Check if the start flag is contained in the response
+                        if (responseContent.contains(startFlag)) {
+
+                            //Get index of start element and create a modified string from the end of the start element
+                            int start = responseContent.indexOf(startFlag);
+                            String modResponseContent = responseContent.substring(start + startFlag.length(), responseContent.length());
+
+                            //Check if the modified string contains the end element
+                            if (modResponseContent.contains(endFlag)) {
+
+                                //Get the index of the end element
+                                int end = modResponseContent.indexOf(endFlag);
+
+                                //Take the value between the start and end elements and store the value in the test properties under the property name
+                                String value = modResponseContent.substring(0, end);
+                                testProperties.addProperty(propertyName, value);
+                                TestifyLogger.debug("Stored value of " + value + " under property name of " + propertyName, this.getClass().getSimpleName());
+
+                                //Add the modified test properties back into AllObjects
+                                AllObjects.setObject("testProperties", testProperties);
+
+                            } else {
+                                TestifyLogger.error("End element: " + endFlag + " not found in response after start element: " + startFlag, this.getClass().getSimpleName());
+                            }
+                        } else {
+                            TestifyLogger.error("Start element: " + startFlag + " not found in response", this.getClass().getSimpleName());
+                        }
+                    } else {
+                        TestifyLogger.error("Processor response is null", this.getClass().getSimpleName());
+                    }
+                } else {
+                    TestifyLogger.error("Property name: " + propertyName + " , start element: " + startFlag + " , and end element: " + endFlag + " in action info must be at least one character", this.getClass().getSimpleName());
+                }
+            } else {
+                TestifyLogger.error("Provided Action Info: " + s + " does not include a property name, start element, and end element separated by == (Ex: Property Name==Start Element==End Element)", this.getClass().getSimpleName());
+            }
+        } else {
+            TestifyLogger.error("Action info must be provided in test file", this.getClass().getSimpleName());
+        }
+    }
+
+    @Override
+    public void start(BundleContext bundleContext) throws Exception {
+
+        //Register the StoreResponseProperty service
+        bundleContext.registerService(Action.class.getName(), new StoreResponsePropertyAction(), null);
+
+    }
+
+    @Override
+    public void stop(BundleContext bundleContext) throws Exception {
+
+    }
+}
