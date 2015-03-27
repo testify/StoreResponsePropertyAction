@@ -23,11 +23,25 @@ import org.codice.testify.objects.Response;
 import org.codice.testify.objects.TestProperties;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.*;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 
 /**
  * The StoreResponsePropertyAction class is a Testify Action service for Response elements as test properties
  */
 public class StoreResponsePropertyAction implements BundleActivator, Action {
+
+    private String xpathOptionText = "|XPATH|";
+    private boolean xpathOption = false;
+    private int expectedActionElements = 3;
 
     @Override
     public void executeAction(String s) {
@@ -40,56 +54,104 @@ public class StoreResponsePropertyAction implements BundleActivator, Action {
         String responseContent = response.getResponse();
 
         if (s != null) {
+            //Check for XPATH option in assertioninfo
+            if (s.startsWith(xpathOptionText)) {
+                s = s.substring(xpathOptionText.length(), s.length());
+                xpathOption = true;
+                expectedActionElements = 2;
+            }
             //Split action info by "=="
             TestifyLogger.debug(s, this.getClass().getSimpleName());
             String[] actionElements = s.split("==");
 
-            //If there are not three action elements, then produce an error
-            if (actionElements.length >= 3) {
+            //If there are not enough action elements, then produce an error
+            if (actionElements.length >= expectedActionElements) {
 
-                //Split the three action elements into separate strings
+                // Get the property name for storage
                 String propertyName = actionElements[0];
-                String startFlag = actionElements[1];
-                String endFlag = actionElements[2];
 
-                //Check that the property name, start flag, and end flag are greater than one character
-                if (propertyName.length() > 0 && startFlag.length() > 0 && endFlag.length() > 0) {
+                if (xpathOption) { // Use Xpath matching
+                    // Get Xpath Text from action elements
+                    String xpathText = actionElements[1];
 
-                    //Check is processor response is null
-                    if (responseContent != null) {
+                    //Set up document and xpath objects
+                    DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                    factory.setNamespaceAware(true);
+                    XPathFactory xpathFactory = XPathFactory.newInstance();
+                    XPath xpath = xpathFactory.newXPath();
 
-                        //Check if the start flag is contained in the response
-                        if (responseContent.contains(startFlag)) {
+                    //Parse processor response into document
+                    Document document = null;
+                    try {
+                        DocumentBuilder builder = factory.newDocumentBuilder();
+                        document = builder.parse(new InputSource(new ByteArrayInputStream(responseContent.getBytes("utf-8"))));
+                    } catch (ParserConfigurationException | SAXException | IOException e) {
+                        TestifyLogger.error(e.getMessage(), this.getClass().getSimpleName());
+                    }
 
-                            //Get index of start element and create a modified string from the end of the start element
-                            int start = responseContent.indexOf(startFlag);
-                            String modResponseContent = responseContent.substring(start + startFlag.length(), responseContent.length());
+                    //If document is not null, run xpath expression
+                    if (document != null) {
+                        try {
+                            //Run xpath expression and return match
+                            XPathExpression xpathExpression = xpath.compile(xpathText);
+                            String xpathResult = (String) xpathExpression.evaluate(document.getDocumentElement(), XPathConstants.STRING);
 
-                            //Check if the modified string contains the end element
-                            if (modResponseContent.contains(endFlag)) {
+                            // Store xpathResult in property
+                            testProperties.addProperty(propertyName, xpathResult);
+                            TestifyLogger.debug("Stored value of " + xpathResult + " under property name of " + propertyName, this.getClass().getSimpleName());
 
-                                //Get the index of the end element
-                                int end = modResponseContent.indexOf(endFlag);
+                        } catch (XPathExpressionException e) {
+                            TestifyLogger.error("An error occurred processing xpath " + e.getMessage(), this.getClass().getSimpleName());
+                        }
+                    }
+                    else {
+                        TestifyLogger.error("The response did not contain valid xml, xpath match could not be performed", this.getClass().getSimpleName());
+                    }
+                }
+                else { // Use simple matching
+                    // Get the start and end flags from the action elements into separate strings
+                    String startFlag = actionElements[1];
+                    String endFlag = actionElements[2];
 
-                                //Take the value between the start and end elements and store the value in the test properties under the property name
-                                String value = modResponseContent.substring(0, end);
-                                testProperties.addProperty(propertyName, value);
-                                TestifyLogger.debug("Stored value of " + value + " under property name of " + propertyName, this.getClass().getSimpleName());
+                    //Check that the property name, start flag, and end flag are greater than one character
+                    if (propertyName.length() > 0 && startFlag.length() > 0 && endFlag.length() > 0) {
 
-                                //Add the modified test properties back into AllObjects
-                                AllObjects.setObject("testProperties", testProperties);
+                        //Check is processor response is null
+                        if (responseContent != null) {
 
+                            //Check if the start flag is contained in the response
+                            if (responseContent.contains(startFlag)) {
+
+                                //Get index of start element and create a modified string from the end of the start element
+                                int start = responseContent.indexOf(startFlag);
+                                String modResponseContent = responseContent.substring(start + startFlag.length(), responseContent.length());
+
+                                //Check if the modified string contains the end element
+                                if (modResponseContent.contains(endFlag)) {
+
+                                    //Get the index of the end element
+                                    int end = modResponseContent.indexOf(endFlag);
+
+                                    //Take the value between the start and end elements and store the value in the test properties under the property name
+                                    String value = modResponseContent.substring(0, end);
+                                    testProperties.addProperty(propertyName, value);
+                                    TestifyLogger.debug("Stored value of " + value + " under property name of " + propertyName, this.getClass().getSimpleName());
+
+                                    //Add the modified test properties back into AllObjects
+                                    AllObjects.setObject("testProperties", testProperties);
+
+                                } else {
+                                    TestifyLogger.error("End element: " + endFlag + " not found in response after start element: " + startFlag, this.getClass().getSimpleName());
+                                }
                             } else {
-                                TestifyLogger.error("End element: " + endFlag + " not found in response after start element: " + startFlag, this.getClass().getSimpleName());
+                                TestifyLogger.error("Start element: " + startFlag + " not found in response", this.getClass().getSimpleName());
                             }
                         } else {
-                            TestifyLogger.error("Start element: " + startFlag + " not found in response", this.getClass().getSimpleName());
+                            TestifyLogger.error("Processor response is null", this.getClass().getSimpleName());
                         }
                     } else {
-                        TestifyLogger.error("Processor response is null", this.getClass().getSimpleName());
+                        TestifyLogger.error("Property name: " + propertyName + " , start element: " + startFlag + " , and end element: " + endFlag + " in action info must be at least one character", this.getClass().getSimpleName());
                     }
-                } else {
-                    TestifyLogger.error("Property name: " + propertyName + " , start element: " + startFlag + " , and end element: " + endFlag + " in action info must be at least one character", this.getClass().getSimpleName());
                 }
             } else {
                 TestifyLogger.error("Provided Action Info: " + s + " does not include a property name, start element, and end element separated by == (Ex: Property Name==Start Element==End Element)", this.getClass().getSimpleName());

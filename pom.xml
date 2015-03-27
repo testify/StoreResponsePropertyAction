@@ -85,6 +85,10 @@
                         <Import-Package>
                             org.codice.testify.objects,
                             org.codice.testify.actions,
+                            javax.xml.parsers,
+                            javax.xml.xpath,
+                            org.w3c.dom,
+                            org.xml.sax,
                             org.osgi.framework
                         </Import-Package>
                     </instructions>

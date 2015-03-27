@@ -29,6 +29,26 @@ public class StoreResponsePropertyActionTest {
     //Set objects
     StoreResponsePropertyAction storeResponsePropertyAction = new StoreResponsePropertyAction();
     Response response = new Response("start    Information  end");
+    Response xmlResponse = new Response("<xq:employees xmlns:xq=\"http://xmlbeans.apache.org/samples/xquery/employees\">\n" +
+            "    <xq:employee>\n" +
+            "        <xq:name>Fred Jones</xq:name>\n" +
+            "        <xq:address location=\"home\">\n" +
+            "            <xq:street>900 Aurora Ave.</xq:street>\n" +
+            "            <xq:city>Seattle</xq:city>\n" +
+            "            <xq:state>WA</xq:state>\n" +
+            "            <xq:zip>98115</xq:zip>\n" +
+            "        </xq:address>\n" +
+            "        <xq:address location=\"work\">\n" +
+            "            <xq:street>2011 152nd Avenue NE</xq:street>\n" +
+            "            <xq:city>Redmond</xq:city>\n" +
+            "            <xq:state>WA</xq:state>\n" +
+            "            <xq:zip>98052</xq:zip>\n" +
+            "        </xq:address>\n" +
+            "        <xq:phone location=\"work\">(425)555-5665</xq:phone>\n" +
+            "        <xq:phone location=\"home\">(206)555-5555</xq:phone>\n" +
+            "        <xq:phone location=\"mobile\">(206)555-4321</xq:phone>\n" +
+            "    </xq:employee>\n" +
+            "</xq:employees>");
 
     @Test
     public void testNoActionInfo() {
@@ -139,5 +159,16 @@ public class StoreResponsePropertyActionTest {
         TestProperties testProperties = (TestProperties)AllObjects.getObject("testProperties");
         assert ( testProperties.getPropertyNames().isEmpty() );
 
+    }
+
+    @Test
+    public void testXpathOption() {
+
+        AllObjects.setObject("response", xmlResponse);
+        AllObjects.setObject("testProperties", new TestProperties());
+        String s = "|XPATH|PropertyName==//*[local-name() = 'name']";
+        storeResponsePropertyAction.executeAction(s);
+        TestProperties testProperties = (TestProperties)AllObjects.getObject("testProperties");
+        assert ( testProperties.getFirstValue("PropertyName").equals("Fred Jones"));
     }
 }
