@@ -87,6 +87,9 @@
                             org.codice.testify.actions,
                             javax.xml.parsers,
                             javax.xml.xpath,
+                            javax.xml.transform,
+                            javax.xml.transform.dom,
+                            javax.xml.transform.stream,
                             org.w3c.dom,
                             org.xml.sax,
                             org.osgi.framework
