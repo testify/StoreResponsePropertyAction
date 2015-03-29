@@ -171,4 +171,15 @@ public class StoreResponsePropertyActionTest {
         TestProperties testProperties = (TestProperties)AllObjects.getObject("testProperties");
         assert ( testProperties.getFirstValue("PropertyName").equals("Fred Jones"));
     }
+
+    @Test
+    public void testNodeOption() {
+
+        AllObjects.setObject("response", xmlResponse);
+        AllObjects.setObject("testProperties", new TestProperties());
+        String s = "|NODE|PropertyName==//*[local-name() = 'name']";
+        storeResponsePropertyAction.executeAction(s);
+        TestProperties testProperties = (TestProperties)AllObjects.getObject("testProperties");
+        assert ( testProperties.getFirstValue("PropertyName").equals("<xq:name>Fred Jones</xq:name>"));
+    }
 }

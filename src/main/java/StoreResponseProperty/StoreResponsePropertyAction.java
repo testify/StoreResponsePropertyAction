@@ -24,15 +24,21 @@ import org.codice.testify.objects.TestProperties;
 import org.osgi.framework.BundleActivator;
 import org.osgi.framework.BundleContext;
 import org.w3c.dom.Document;
+import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.*;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import javax.xml.xpath.*;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 
 /**
  * The StoreResponsePropertyAction class is a Testify Action service for Response elements as test properties
@@ -40,7 +46,9 @@ import java.io.IOException;
 public class StoreResponsePropertyAction implements BundleActivator, Action {
 
     private String xpathOptionText = "|XPATH|";
+    private String nodeOptionText = "|NODE|";
     private boolean xpathOption = false;
+    private boolean nodeOption = false;
     private int expectedActionElements = 3;
 
     @Override
@@ -60,6 +68,11 @@ public class StoreResponsePropertyAction implements BundleActivator, Action {
                 xpathOption = true;
                 expectedActionElements = 2;
             }
+            if (s.startsWith(nodeOptionText)) {
+                s = s.substring(nodeOptionText.length(), s.length());
+                nodeOption = true;
+                expectedActionElements = 2;
+            }
             //Split action info by "=="
             TestifyLogger.debug(s, this.getClass().getSimpleName());
             String[] actionElements = s.split("==");
@@ -70,7 +83,8 @@ public class StoreResponsePropertyAction implements BundleActivator, Action {
                 // Get the property name for storage
                 String propertyName = actionElements[0];
 
-                if (xpathOption) { // Use Xpath matching
+                // Use Xpath matching
+                if (xpathOption) {
                     // Get Xpath Text from action elements
                     String xpathText = actionElements[1];
 
@@ -95,7 +109,6 @@ public class StoreResponsePropertyAction implements BundleActivator, Action {
                             //Run xpath expression and return match
                             XPathExpression xpathExpression = xpath.compile(xpathText);
                             String xpathResult = (String) xpathExpression.evaluate(document.getDocumentElement(), XPathConstants.STRING);
-
                             // Store xpathResult in property
                             testProperties.addProperty(propertyName, xpathResult);
                             TestifyLogger.debug("Stored value of " + xpathResult + " under property name of " + propertyName, this.getClass().getSimpleName());
@@ -108,7 +121,33 @@ public class StoreResponsePropertyAction implements BundleActivator, Action {
                         TestifyLogger.error("The response did not contain valid xml, xpath match could not be performed", this.getClass().getSimpleName());
                     }
                 }
-                else { // Use simple matching
+                else if (nodeOption) {
+                    String xpathText = actionElements[1];
+                    DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+                    Document doc = null;
+                    try {
+                        doc = dbf.newDocumentBuilder().parse(new InputSource(new StringReader(responseContent)));
+                    } catch (SAXException e) {
+                        e.printStackTrace();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    } catch (ParserConfigurationException e) {
+                        e.printStackTrace();
+                    }
+
+                    XPath xPath = XPathFactory.newInstance().newXPath();
+                    Node result = null;
+                    try {
+                        result = (Node)xPath.evaluate(xpathText, doc, XPathConstants.NODE);
+                    } catch (XPathExpressionException e) {
+                        TestifyLogger.error("Error occurred evaluating xpath", this.getClass().getSimpleName());
+                    }
+
+                    testProperties.addProperty(propertyName, nodeToString(result));
+                    TestifyLogger.debug("Stored value of " + nodeToString(result) + " under property name of " + propertyName, this.getClass().getSimpleName());
+                    System.out.println(nodeToString(result));
+                }
+                else if (!nodeOption & !xpathOption) { // Use simple matching
                     // Get the start and end flags from the action elements into separate strings
                     String startFlag = actionElements[1];
                     String endFlag = actionElements[2];
@@ -159,6 +198,23 @@ public class StoreResponsePropertyAction implements BundleActivator, Action {
         } else {
             TestifyLogger.error("Action info must be provided in test file", this.getClass().getSimpleName());
         }
+    }
+
+    private String nodeToString(Node node) {
+        StringWriter stringWriter = new StringWriter();
+        Transformer transformer = null;
+        try {
+            transformer = TransformerFactory.newInstance().newTransformer();
+        } catch (TransformerConfigurationException e) {
+            TestifyLogger.error("Error occurred creating transformer", this.getClass().getSimpleName());
+        }
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
+        try {
+            transformer.transform(new DOMSource(node), new StreamResult(stringWriter));
+        } catch (TransformerException e) {
+            TestifyLogger.error("Error occurred transforming xml to string", this.getClass().getSimpleName());
+        }
+        return(stringWriter.toString());
     }
 
     @Override
